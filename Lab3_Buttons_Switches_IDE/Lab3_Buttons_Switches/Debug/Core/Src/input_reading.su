@@ -1,0 +1,5 @@
+../Core/Src/input_reading.c:28:6:input_reading_init	16	static
+../Core/Src/input_reading.c:42:6:button_reading	24	static
+../Core/Src/input_reading.c:91:9:is_button_pressed	16	static
+../Core/Src/input_reading.c:101:9:is_button_pressed_1s	16	static
+../Core/Src/input_reading.c:111:9:button_take_events	32	static,ignoring_inline_asm

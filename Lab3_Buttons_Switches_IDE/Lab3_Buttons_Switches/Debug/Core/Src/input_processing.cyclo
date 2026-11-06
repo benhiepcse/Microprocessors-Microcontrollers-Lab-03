@@ -1,0 +1,10 @@
+../Core/Src/input_processing.c:30:13:increase_edit_value	2
+../Core/Src/input_processing.c:38:13:set_edit_value	10
+../Core/Src/input_processing.c:83:13:enter_mode	5
+../Core/Src/input_processing.c:113:6:input_processing_init	2
+../Core/Src/input_processing.c:128:6:fsm_for_input_processing	22
+../Core/Src/input_processing.c:235:9:app_get_mode	1
+../Core/Src/input_processing.c:240:9:app_get_edit_value	1
+../Core/Src/input_processing.c:245:9:app_get_red_duration	1
+../Core/Src/input_processing.c:250:9:app_get_amber_duration	1
+../Core/Src/input_processing.c:255:9:app_get_green_duration	1
