@@ -20,6 +20,8 @@ static const uint16_t road2_segment_pins[7] = {
 
 static volatile uint8_t displayed_mode = 1U;
 static volatile uint8_t displayed_edit = 0U;
+static volatile uint8_t normal_road1 = 0U;
+static volatile uint8_t normal_road2 = 0U;
 
 /* Used by the display ISR after initialization. */
 static uint8_t scan_position = 0U;
@@ -152,14 +154,8 @@ void led_display_show_mode(uint8_t mode)
     blink_previous_ms = HAL_GetTick();
 
     if (mode == 1U) {
+        /* traffic_normal_run() controls the normal traffic cycle. */
         blink_on = 0U;
-
-        /* Temporary Mode 1 indicator; traffic FSM is not implemented yet. */
-        HAL_GPIO_WritePin(
-            LED_RED_1_GPIO_Port,
-            LED_RED_1_Pin,
-            GPIO_PIN_RESET
-        );
     } else {
         blink_on = 1U;
         write_selected_color(blink_on);
@@ -179,26 +175,44 @@ void led_display_set_edit_value(uint8_t value)
 
 void led_display_scan(void)
 {
+    static uint8_t frame_right = 0U;
+    static uint8_t frame_show_left = 0U;
+
+    /* Disable all digits before changing segment data. */
     display_blank();
 
     if (scan_position == 0U) {
+        /* Capture one consistent frame. */
         frame_mode = displayed_mode;
-        frame_edit = displayed_edit;
 
-        if ((frame_mode < 1U) || (frame_mode > 4U)) {
-            frame_mode = 1U;
+        if (frame_mode == 1U) {
+            /* Normal mode: countdown for both roads. */
+            frame_edit = normal_road1;
+            frame_right = normal_road2;
+            frame_show_left = 1U;
+        } else {
+            /* Setting modes: editing value / mode number. */
+            frame_edit = displayed_edit;
+            frame_right = frame_mode;
+
+            frame_show_left =
+                ((frame_mode >= 2U) &&
+                 (frame_mode <= 4U) &&
+                 (frame_edit >= 1U) &&
+                 (frame_edit <= 99U)) ? 1U : 0U;
         }
 
-        /* Show the editing value in modes 2, 3 and 4. */
-        if ((frame_mode < 2U) || (frame_mode > 4U) ||
-            (frame_edit > 99U)) {
-            frame_edit = 0U;
-        }
+        /* Tens digits of both roads. */
+        write_digit(
+            road2_segment_pins,
+            frame_right / 10U
+        );
 
-        write_digit(road2_segment_pins, 0U);
-
-        if (frame_edit != 0U) {
-            write_digit(road1_segment_pins, frame_edit / 10U);
+        if (frame_show_left != 0U) {
+            write_digit(
+                road1_segment_pins,
+                frame_edit / 10U
+            );
 
             HAL_GPIO_WritePin(
                 EN0_GPIO_Port,
@@ -215,10 +229,17 @@ void led_display_scan(void)
 
         scan_position = 1U;
     } else {
-        write_digit(road2_segment_pins, frame_mode);
+        /* Units digits of both roads. */
+        write_digit(
+            road2_segment_pins,
+            frame_right % 10U
+        );
 
-        if (frame_edit != 0U) {
-            write_digit(road1_segment_pins, frame_edit % 10U);
+        if (frame_show_left != 0U) {
+            write_digit(
+                road1_segment_pins,
+                frame_edit % 10U
+            );
 
             HAL_GPIO_WritePin(
                 EN1_GPIO_Port,
@@ -260,4 +281,19 @@ void led_display_run(void)
             write_selected_color(blink_on);
         }
     }
+}
+
+void led_display_set_normal_values(
+    uint8_t road1_value,
+    uint8_t road2_value
+)
+{
+    uint32_t saved_primask = __get_PRIMASK();
+
+    __disable_irq();
+
+    normal_road1 = (road1_value <= 99U) ? road1_value : 0U;
+    normal_road2 = (road2_value <= 99U) ? road2_value : 0U;
+
+    __set_PRIMASK(saved_primask);
 }

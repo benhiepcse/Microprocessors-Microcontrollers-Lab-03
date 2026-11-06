@@ -58,6 +58,130 @@ static void MX_TIM2_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+static uint8_t traffic_active = 0U;
+static uint32_t cycle_start_ms = 0U;
+static uint16_t previous_on_pins = 0U;
+
+static void traffic_normal_run(void)
+{
+    /* Editing modes own the LEDs while normal mode is stopped. */
+    if (app_get_mode() != 1U) {
+        traffic_active = 0U;
+        return;
+    }
+
+    uint32_t now_ms = HAL_GetTick();
+
+    /* Restart the cycle whenever Mode 1 is entered. */
+    if (traffic_active == 0U) {
+        cycle_start_ms = now_ms;
+        previous_on_pins = 0U;
+        traffic_active = 1U;
+    }
+
+    uint32_t green_ms =
+        (uint32_t)app_get_green_duration() * 1000U;
+
+    uint32_t amber_ms =
+        (uint32_t)app_get_amber_duration() * 1000U;
+
+    /*
+     * The existing SET logic maintains:
+     * red = green + amber.
+     */
+    uint32_t half_cycle_ms = green_ms + amber_ms;
+    uint32_t cycle_ms = 2U * half_cycle_ms;
+
+    /* Defensive check; normal SET logic prevents zero durations. */
+    if ((green_ms == 0U) || (amber_ms == 0U)) {
+        traffic_leds_off();
+        led_display_set_normal_values(0U, 0U);
+        return;
+    }
+
+    uint32_t elapsed_ms =
+        (uint32_t)(now_ms - cycle_start_ms);
+
+    /* Skip completed cycles without accumulating timing drift. */
+    if (elapsed_ms >= cycle_ms) {
+        uint32_t cycles = elapsed_ms / cycle_ms;
+
+        cycle_start_ms += cycles * cycle_ms;
+        elapsed_ms %= cycle_ms;
+    }
+
+    uint32_t phase_elapsed_ms;
+    uint8_t left;
+    uint8_t right;
+    uint16_t on_pins;
+
+    if (elapsed_ms < green_ms) {
+        /* Phase 0: road 1 RED, road 2 GREEN. */
+        phase_elapsed_ms = elapsed_ms;
+
+        left = (uint8_t)(
+            (half_cycle_ms - phase_elapsed_ms + 999U) / 1000U
+        );
+
+        right = (uint8_t)(
+            (green_ms - phase_elapsed_ms + 999U) / 1000U
+        );
+
+        on_pins = LED_RED_1_Pin | LED_GREEN_2_Pin;
+    } else if (elapsed_ms < half_cycle_ms) {
+        /* Phase 1: road 1 RED, road 2 AMBER. */
+        phase_elapsed_ms = elapsed_ms - green_ms;
+
+        left = (uint8_t)(
+            (amber_ms - phase_elapsed_ms + 999U) / 1000U
+        );
+
+        right = left;
+
+        on_pins = LED_RED_1_Pin | LED_YELLOW_2_Pin;
+    } else if (elapsed_ms < half_cycle_ms + green_ms) {
+        /* Phase 2: road 1 GREEN, road 2 RED. */
+        phase_elapsed_ms = elapsed_ms - half_cycle_ms;
+
+        left = (uint8_t)(
+            (green_ms - phase_elapsed_ms + 999U) / 1000U
+        );
+
+        right = (uint8_t)(
+            (half_cycle_ms - phase_elapsed_ms + 999U) / 1000U
+        );
+
+        on_pins = LED_GREEN_1_Pin | LED_RED_2_Pin;
+    } else {
+        /* Phase 3: road 1 AMBER, road 2 RED. */
+        phase_elapsed_ms =
+            elapsed_ms - half_cycle_ms - green_ms;
+
+        left = (uint8_t)(
+            (amber_ms - phase_elapsed_ms + 999U) / 1000U
+        );
+
+        right = left;
+
+        on_pins = LED_YELLOW_1_Pin | LED_RED_2_Pin;
+    }
+
+    /* Your traffic LEDs are active-low. */
+    if (on_pins != previous_on_pins) {
+        traffic_leds_off();
+
+        HAL_GPIO_WritePin(
+            GPIOA,
+            on_pins,
+            GPIO_PIN_RESET
+        );
+
+        previous_on_pins = on_pins;
+    }
+
+    led_display_set_normal_values(left, right);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -114,6 +238,9 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	    fsm_for_input_processing();
+
+	    traffic_normal_run();
+
 	    led_display_run();
 
 	    __WFI();
